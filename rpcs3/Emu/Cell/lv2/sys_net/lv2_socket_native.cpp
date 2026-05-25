@@ -949,10 +949,13 @@ std::optional<std::tuple<s32, std::vector<u8>, sys_net_sockaddr>> lv2_socket_nat
 			return {{len, res_buf, sn_addr}};
 		}
 		// Windows will return WSASHUTDOWN when the connection is shutdown, POSIX just returns EOF (0) in this situation.
+		// HACK (Resistance 2 beta NPUA70018 matchmaking workaround): RPCS3 forces all sockets to non-blocking
+		// via np::set_socket_non_blocking. On non-blocking TCP sockets, Windows can spuriously report
+		// WSAESHUTDOWN during select+recv races even though the peer is still connected. Treat as
+		// would-block (std::nullopt) so the caller retries instead of seeing a false EOF.
 		if (get_native_error() == WSAESHUTDOWN)
 		{
-			const auto sn_addr = native_addr_to_sys_net_addr(native_addr);
-			return {{0, {}, sn_addr}};
+			return std::nullopt;
 		}
 	}
 	const auto result = get_last_error(!so_nbio && (flags & SYS_NET_MSG_DONTWAIT) == 0, connecting);
