@@ -934,10 +934,24 @@ std::optional<std::tuple<s32, std::vector<u8>, sys_net_sockaddr>> lv2_socket_nat
 
 	auto native_result = ::recvfrom(native_socket, reinterpret_cast<char*>(res_buf.data()), len, native_flags, reinterpret_cast<struct sockaddr*>(&native_addr), &native_addrlen);
 
-	if (native_result >= 0)
+	// DIAGNOSTIC (R2 beta NPUA70018): log every recv to identify why 0 bytes are returned for matchmaking socket
+	sys_net.error("[R2 DIAG] recvfrom: lv2_id=%d native_result=%d native_error=%d len=%u flags=0x%x so_nbio=%d connecting=%d",
+		lv2_id, native_result, get_native_error(), len, native_flags, so_nbio, connecting);
+
+	if (native_result > 0)
 	{
 		const auto sn_addr = native_addr_to_sys_net_addr(native_addr);
 		return {{::narrow<s32>(native_result), res_buf, sn_addr}};
+	}
+
+	// HACK (R2 beta NPUA70018): native_result == 0 normally means "peer gracefully closed" (POSIX EOF semantic).
+	// But on Windows non-blocking TCP sockets, we observe spurious 0-returns even when the peer is still
+	// connected and has data buffered. Treat 0 as would-block instead of EOF so the caller retries until
+	// real data arrives. Risk: legitimate graceful-close events are no longer detected via recv-returns-0,
+	// but they should still be detectable via other means (RST, shutdown, timeout).
+	if (native_result == 0)
+	{
+		return std::nullopt;
 	}
 #ifdef _WIN32
 	else
