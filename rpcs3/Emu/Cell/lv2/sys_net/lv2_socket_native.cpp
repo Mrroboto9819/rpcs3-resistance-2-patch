@@ -221,6 +221,11 @@ std::optional<s32> lv2_socket_native::connect(const sys_net_sockaddr& addr)
 
 	sys_net.notice("[Native] Attempting to connect on %s:%d", native_addr.sin_addr, std::bit_cast<be_t<u16>, u16>(native_addr.sin_port));
 
+	// DIAGNOSTIC (R2 beta NPUA70018): log every connect with FD info
+	sys_net.error("[R2 DIAG] connect: lv2_id=%d native_socket=%d -> %s:%d",
+		lv2_id, static_cast<int>(native_socket),
+		native_addr.sin_addr, std::bit_cast<be_t<u16>, u16>(native_addr.sin_port));
+
 	auto& nph = g_fxo->get<named_thread<np::np_handler>>();
 	if (!nph.get_net_status() && is_ip_public_address(native_addr))
 	{
@@ -1041,6 +1046,11 @@ std::optional<s32> lv2_socket_native::sendto(s32 flags, const std::vector<u8>& b
 	}
 
 	native_result = ::sendto(native_socket, reinterpret_cast<const char*>(buf.data()), ::narrow<int>(buf.size()), native_flags, native_addr ? reinterpret_cast<struct sockaddr*>(&native_addr.value()) : nullptr, native_addr ? sizeof(sockaddr_in) : 0);
+
+	// DIAGNOSTIC (R2 beta NPUA70018): log every send with FD info
+	sys_net.error("[R2 DIAG] sendto: lv2_id=%d native_socket=%d buf_size=%u native_result=%d native_error=%d",
+		lv2_id, static_cast<int>(native_socket), static_cast<unsigned int>(buf.size()),
+		native_result, native_result < 0 ? get_native_error() : 0);
 
 	if (native_result >= 0)
 	{
